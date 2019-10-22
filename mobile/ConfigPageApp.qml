@@ -1,5 +1,5 @@
 /*
-    Copyright 2018 Benjamin Vedder	benjamin@vedder.se
+    Copyright 2018 - 2019 Benjamin Vedder	benjamin@vedder.se
 
     This file is part of VESC Tool.
 
@@ -27,47 +27,85 @@ import Vedder.vesc.configparams 1.0
 
 Item {
     property Commands mCommands: VescIf.commands()
-    property var editorsVisible: []
+    property bool isHorizontal: width > height
 
     ParamEditors {
         id: editors
     }
 
-    PpmMap {
+    Dialog {
         id: ppmMap
-        parentWidth: column.width
+        title: "PPM Mapping"
+        standardButtons: Dialog.Close
+        modal: true
+        focus: true
+
+        width: parent.width - 20
+        closePolicy: Popup.CloseOnEscape
+        x: 10
+        y: (parent.height - height) / 2
+        parent: ApplicationWindow.overlay
+
+        PpmMap {
+            anchors.fill: parent
+        }
     }
 
-    AdcMap {
+    Dialog {
         id: adcMap
-        parentWidth: column.width
+        title: "ADC Mapping"
+        standardButtons: Dialog.Close
+        modal: true
+        focus: true
+
+        width: parent.width - 20
+        closePolicy: Popup.CloseOnEscape
+        x: 10
+        y: parent.height / 2 - height / 2
+        parent: ApplicationWindow.overlay
+
+        AdcMap {
+            anchors.fill: parent
+        }
     }
 
-    NrfPair {
+    Dialog {
         id: nrfPair
-        parentWidth: column.width
+        title: "NRF Pairing"
+        standardButtons: Dialog.Close
+        modal: true
+        focus: true
+
+        width: parent.width - 20
+        closePolicy: Popup.CloseOnEscape
+        x: 10
+        y: parent.height / 2 - height / 2
+        parent: ApplicationWindow.overlay
+
+        NrfPair {
+            anchors.fill: parent
+        }
     }
 
-    function addSpacer() {
-        editorsVisible.push(Qt.createQmlObject(
-                                'import QtQuick 2.7; import QtQuick.Layouts 1.3; Rectangle {Layout.fillHeight: true}',
-                                scrollCol,
-                                "spacer1"))
+    onIsHorizontalChanged: {
+        updateEditors()
     }
 
     function addSeparator(text) {
-        editorsVisible.push(editors.createSeparator(scrollCol, text))
+        var e = editors.createSeparator(scrollCol, text)
+        e.Layout.columnSpan = isHorizontal ? 2 : 1
     }
 
     function destroyEditors() {
-        for (var i = 0;i < editorsVisible.length;i++) {
-            editorsVisible[i].destroy();
+        for(var i = scrollCol.children.length;i > 0;i--) {
+            scrollCol.children[i - 1].destroy(1) // Only works with delay on android, seems to be a bug
         }
-        editorsVisible = []
     }
 
     function createEditorApp(param) {
-        editorsVisible.push(editors.createEditorApp(scrollCol, param))
+        var e = editors.createEditorApp(scrollCol, param)
+        e.Layout.preferredWidth = 500
+        e.Layout.fillsWidth = true
     }
 
     function updateEditors() {
@@ -82,7 +120,11 @@ Item {
             createEditorApp("send_can_status")
             createEditorApp("send_can_status_rate_hz")
             createEditorApp("can_baud_rate")
-            addSpacer()
+            createEditorApp("pairing_done")
+            createEditorApp("permanent_uart_enabled")
+            createEditorApp("shutdown_mode")
+            createEditorApp("uavcan_enable")
+            createEditorApp("uavcan_esc_index")
             break;
 
         case "PPM":
@@ -94,24 +136,24 @@ Item {
                 createEditorApp("app_ppm_conf.pid_max_erpm")
                 createEditorApp("app_ppm_conf.ramp_time_pos")
                 createEditorApp("app_ppm_conf.ramp_time_neg")
+                createEditorApp("app_ppm_conf.max_erpm_for_dir")
+                createEditorApp("app_ppm_conf.smart_rev_max_duty")
+                createEditorApp("app_ppm_conf.smart_rev_ramp_time")
                 addSeparator("Multiple VESCs over CAN-bus")
                 createEditorApp("app_ppm_conf.multi_esc")
                 createEditorApp("app_ppm_conf.tc")
                 createEditorApp("app_ppm_conf.tc_max_diff")
-                addSpacer()
                 break;
             case "Mapping":
                 createEditorApp("app_ppm_conf.pulse_start")
                 createEditorApp("app_ppm_conf.pulse_end")
                 createEditorApp("app_ppm_conf.pulse_center")
                 createEditorApp("app_ppm_conf.hyst")
-                addSpacer()
                 break;
             case "Throttle Curve":
                 createEditorApp("app_ppm_conf.throttle_exp")
                 createEditorApp("app_ppm_conf.throttle_exp_brake")
                 createEditorApp("app_ppm_conf.throttle_exp_mode")
-                addSpacer()
                 break;
             default:
                 break;
@@ -133,7 +175,6 @@ Item {
                 createEditorApp("app_adc_conf.multi_esc")
                 createEditorApp("app_adc_conf.tc")
                 createEditorApp("app_adc_conf.tc_max_diff")
-                addSpacer()
                 break;
             case "Mapping":
                 createEditorApp("app_adc_conf.hyst")
@@ -146,13 +187,11 @@ Item {
                 createEditorApp("app_adc_conf.voltage2_start")
                 createEditorApp("app_adc_conf.voltage2_end")
                 createEditorApp("app_adc_conf.voltage2_inverted")
-                addSpacer()
                 break;
             case "Throttle Curve":
                 createEditorApp("app_adc_conf.throttle_exp")
                 createEditorApp("app_adc_conf.throttle_exp_brake")
                 createEditorApp("app_adc_conf.throttle_exp_mode")
-                addSpacer()
                 break;
             default:
                 break;
@@ -161,10 +200,9 @@ Item {
 
         case "UART":
             createEditorApp("app_uart_baudrate")
-            addSpacer()
             break;
 
-        case "Nunchuk":
+        case "VESC Remote":
             switch(tabBox.currentText) {
             case "General":
                 createEditorApp("app_chuk_conf.ctrl_type")
@@ -172,17 +210,18 @@ Item {
                 createEditorApp("app_chuk_conf.ramp_time_neg")
                 createEditorApp("app_chuk_conf.stick_erpm_per_s_in_cc")
                 createEditorApp("app_chuk_conf.hyst")
+                createEditorApp("app_chuk_conf.use_smart_rev")
+                createEditorApp("app_chuk_conf.smart_rev_max_duty")
+                createEditorApp("app_chuk_conf.smart_rev_ramp_time")
                 addSeparator("Multiple VESCs over CAN-bus")
                 createEditorApp("app_chuk_conf.multi_esc")
                 createEditorApp("app_chuk_conf.tc")
                 createEditorApp("app_chuk_conf.tc_max_diff")
-                addSpacer()
                 break;
             case "Throttle Curve":
                 createEditorApp("app_chuk_conf.throttle_exp")
                 createEditorApp("app_chuk_conf.throttle_exp_brake")
                 createEditorApp("app_chuk_conf.throttle_exp_mode")
-                addSpacer()
                 break;
             default:
                 break;
@@ -200,10 +239,71 @@ Item {
             createEditorApp("app_nrf_conf.retry_delay")
             createEditorApp("app_nrf_conf.retries")
             addSeparator("Address")
-            createEditorApp("app_nrf_conf.address_0")
-            createEditorApp("app_nrf_conf.address_1")
-            createEditorApp("app_nrf_conf.address_2")
-            addSpacer()
+            createEditorApp("app_nrf_conf.address__0")
+            createEditorApp("app_nrf_conf.address__1")
+            createEditorApp("app_nrf_conf.address__2")
+            break;
+
+        case "Balance":
+            switch(tabBox.currentText) {
+            case "Config":
+                addSeparator("Startup")
+                createEditorApp("app_balance_conf.startup_pitch_tolerance")
+                createEditorApp("app_balance_conf.startup_roll_tolerance")
+                createEditorApp("app_balance_conf.startup_speed")
+                addSeparator("Tiltback")
+                createEditorApp("app_balance_conf.tiltback_duty")
+                createEditorApp("app_balance_conf.tiltback_angle")
+                createEditorApp("app_balance_conf.tiltback_speed")
+                createEditorApp("app_balance_conf.tiltback_high_voltage")
+                createEditorApp("app_balance_conf.tiltback_low_voltage")
+                addSeparator("Overspeed")
+                createEditorApp("app_balance_conf.overspeed_duty")
+                addSeparator("Fault")
+                createEditorApp("app_balance_conf.pitch_fault")
+                createEditorApp("app_balance_conf.roll_fault")
+                createEditorApp("app_balance_conf.use_switches")
+                break;
+            case "Tune":
+                addSeparator("PID")
+                createEditorApp("app_balance_conf.kp")
+                createEditorApp("app_balance_conf.ki")
+                createEditorApp("app_balance_conf.kd")
+                addSeparator("Main Loop")
+                createEditorApp("app_balance_conf.hertz")
+                addSeparator("Experimental")
+                createEditorApp("app_balance_conf.deadzone")
+                createEditorApp("app_balance_conf.current_boost")
+                break;
+            default:
+                break;
+            }
+            break;
+
+        case "IMU":
+            createEditorApp("imu_conf.type")
+            createEditorApp("imu_conf.sample_rate_hz")
+            addSeparator("Filters")
+            createEditorApp("imu_conf.mode")
+            createEditorApp("imu_conf.accel_confidence_decay")
+            createEditorApp("imu_conf.mahony_kp")
+            createEditorApp("imu_conf.mahony_ki")
+            createEditorApp("imu_conf.madgwick_beta")
+            addSeparator("Rotation")
+            createEditorApp("imu_conf.rot_roll")
+            createEditorApp("imu_conf.rot_pitch")
+            createEditorApp("imu_conf.rot_yaw")
+            addSeparator("Offsets")
+            createEditorApp("imu_conf.accel_offsets__0")
+            createEditorApp("imu_conf.accel_offsets__1")
+            createEditorApp("imu_conf.accel_offsets__2")
+            createEditorApp("imu_conf.gyro_offsets__0")
+            createEditorApp("imu_conf.gyro_offsets__1")
+            createEditorApp("imu_conf.gyro_offsets__2")
+            createEditorApp("imu_conf.gyro_offset_comp_fact__0")
+            createEditorApp("imu_conf.gyro_offset_comp_fact__1")
+            createEditorApp("imu_conf.gyro_offset_comp_fact__2")
+            createEditorApp("imu_conf.gyro_offset_comp_clamp")
             break;
 
         default:
@@ -216,76 +316,94 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        ComboBox {
-            id: pageBox
+        GridLayout {
             Layout.fillWidth: true
-            model: [
-                "General",
-                "PPM",
-                "ADC",
-                "UART",
-                "Nunchuk",
-                "NRF"
-            ]
+            columns: isHorizontal ? 2 : 1
+            rowSpacing: -5
+            ComboBox {
+                id: pageBox
+                Layout.fillWidth: true
+                model: [
+                    "General",
+                    "PPM",
+                    "ADC",
+                    "UART",
+                    "VESC Remote",
+                    "NRF",
+                    "Balance",
+                    "IMU"
+                ]
 
-            onCurrentTextChanged: {
-                var tabTextOld = tabBox.currentText
+                onCurrentTextChanged: {
+                    var tabTextOld = tabBox.currentText
 
-                switch(currentText) {
-                case "General":
-                    tabBox.model = []
-                    break;
+                    switch(currentText) {
+                    case "General":
+                        tabBox.model = []
+                        break;
 
-                case "PPM":
-                    tabBox.model = [
-                                "General",
-                                "Mapping",
-                                "Throttle Curve"
-                            ]
-                    break;
+                    case "PPM":
+                        tabBox.model = [
+                                    "General",
+                                    "Mapping",
+                                    "Throttle Curve"
+                                ]
+                        break;
 
-                case "ADC":
-                    tabBox.model = [
-                                "General",
-                                "Mapping",
-                                "Throttle Curve"
-                            ]
-                    break;
+                    case "ADC":
+                        tabBox.model = [
+                                    "General",
+                                    "Mapping",
+                                    "Throttle Curve"
+                                ]
+                        break;
 
-                case "UART":
-                    tabBox.model = []
-                    break;
+                    case "UART":
+                        tabBox.model = []
+                        break;
 
-                case "Nunchuk":
-                    tabBox.model = [
-                                "General",
-                                "Throttle Curve"
-                            ]
-                    break;
+                    case "VESC Remote":
+                        tabBox.model = [
+                                    "General",
+                                    "Throttle Curve"
+                                ]
+                        break;
 
-                case "NRF":
-                    tabBox.model = []
-                    break;
+                    case "NRF":
+                        tabBox.model = []
+                        break;
 
-                default:
-                    tabBox.model = []
-                    break;
-                }
+                    case "Balance":
+                        tabBox.model = [
+                                    "Config",
+                                    "Tune"
+                                ]
+                        break;
 
-                tabBox.visible = tabBox.currentText.length !== 0
+                    case "IMU":
+                        tabBox.model = []
+                        break;
 
-                if (tabTextOld == tabBox.currentText) {
-                    updateEditors()
+                    default:
+                        tabBox.model = []
+                        break;
+                    }
+
+                    tabBox.visible = tabBox.currentText.length !== 0
+
+                    if (tabTextOld == tabBox.currentText) {
+                        updateEditors()
+                    }
                 }
             }
-        }
 
-        ComboBox {
-            id: tabBox
-            Layout.fillWidth: true
+            ComboBox {
+                id: tabBox
+                Layout.fillWidth: true
 
-            onCurrentTextChanged: {
-                updateEditors()
+                onCurrentTextChanged: {
+                    updateEditors()
+                }
             }
         }
 
@@ -296,9 +414,10 @@ Item {
             contentWidth: column.width
             clip: true
 
-            ColumnLayout {
+            GridLayout {
                 id: scrollCol
                 anchors.fill: parent
+                columns: isHorizontal ? 2 : 1
             }
         }
 
@@ -343,19 +462,19 @@ Item {
                     MenuItem {
                         text: "PPM Mapping..."
                         onTriggered: {
-                            ppmMap.openDialog()
+                            ppmMap.open()
                         }
                     }
                     MenuItem {
                         text: "ADC Mapping..."
                         onTriggered: {
-                            adcMap.openDialog()
+                            adcMap.open()
                         }
                     }
                     MenuItem {
                         text: "Pair NRF..."
                         onTriggered: {
-                            nrfPair.openDialog()
+                            nrfPair.open()
                         }
                     }
                 }
